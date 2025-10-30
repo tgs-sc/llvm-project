@@ -1372,8 +1372,12 @@ private:
     uint64_t &Size = PHIOrSelectSizes[&I];
     if (!Size) {
       // This is a new PHI/Select, check for an unsafe use of it.
-      if (Instruction *UnsafeI = hasUnsafePHIOrSelectUse(&I, Size))
-        return PI.setAborted(UnsafeI);
+      if (Instruction *UnsafeI = hasUnsafePHIOrSelectUse(&I, Size)) {
+        uint64_t OffsetAsZExt = Offset.getZExtValue();
+        if (OffsetAsZExt == 0)
+          return PI.setAborted(UnsafeI);
+        Size = AllocSize - OffsetAsZExt;
+      }
     }
 
     // For PHI and select operands outside the alloca, we can't nuke the entire
@@ -3954,9 +3958,7 @@ private:
         continue;
       }
 
-      assert(isa<BitCastInst>(I) || isa<AddrSpaceCastInst>(I) ||
-             isa<PHINode>(I) || isa<SelectInst>(I) ||
-             isa<GetElementPtrInst>(I));
+      // We are not interested in other instructions
       for (User *U : I->users())
         if (Visited.insert(cast<Instruction>(U)).second)
           Uses.push_back(cast<Instruction>(U));
